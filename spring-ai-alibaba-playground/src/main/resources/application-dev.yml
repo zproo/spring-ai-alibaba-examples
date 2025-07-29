@@ -33,7 +33,10 @@ spring:
         access-key-secret: ${ADB_ACCESS_KEY_SECRET}
 
     dashscope:
+#      千昭
       api-key: sk-1269ef5dbf4d4189aa3aec11795a2442
+#      阳修
+#      api-key: sk-a6139cb12cb24b138052f41f7c48f092
     # 使用自定义增强的 mcp server config 替换
     # mcp:
     #   client:
@@ -62,8 +65,8 @@ spring:
        tool-calling:
          baidu:
            translate:
-             ak: ${BAIDU_TRANSLATE_APP_ID:input-your-baidu-app-id}
-             sk: ${BAIDU_TRANSLATE_SECRET_KEY:input-your-baidu-app-key}
+             ak: 20250724002414909
+             sk: EHqkyzh2H9dZ3i90H_GV
            map:
              ak: ${BAIDU_MAP_API_KEY:input-your-baidu-map-key}
 

@@ -48,98 +48,96 @@ import org.springframework.stereotype.Service;
 @Service
 public class SAAToolsService {
 
-	private static final Logger logger = LoggerFactory.getLogger(SAAToolsService.class);
+    private static final Logger logger = LoggerFactory.getLogger(SAAToolsService.class);
 
-	private final ChatClient chatClient;
+    private final ChatClient chatClient;
 
-	private final ToolCallingManager toolCallingManager;
+    private final ToolCallingManager toolCallingManager;
 
-	private final ToolsInit toolsInit;
+    private final ToolsInit toolsInit;
 
-	public SAAToolsService(
-			ToolsInit toolsInit,
-			ToolCallingManager toolCallingManager,
-			SimpleLoggerAdvisor simpleLoggerAdvisor,
-			MessageChatMemoryAdvisor messageChatMemoryAdvisor,
-			@Qualifier("openAiChatModel") ChatModel chatModel
-	) {
+    public SAAToolsService(
+            ToolsInit toolsInit,
+            ToolCallingManager toolCallingManager,
+            SimpleLoggerAdvisor simpleLoggerAdvisor,
+            MessageChatMemoryAdvisor messageChatMemoryAdvisor,
+            @Qualifier("dashscopeChatModel") ChatModel chatModel
+    ) {
 
-		this.toolsInit = toolsInit;
-		this.toolCallingManager = toolCallingManager;
+        this.toolsInit = toolsInit;
+        this.toolCallingManager = toolCallingManager;
 
-		this.chatClient = ChatClient.builder(chatModel)
-				.defaultAdvisors(
-						simpleLoggerAdvisor
+        this.chatClient = ChatClient.builder(chatModel)
+                .defaultAdvisors(
+                        simpleLoggerAdvisor
 //						messageChatMemoryAdvisor
-				).build();
-	}
+                ).build();
+    }
 
-	public ToolCallResp chat(String prompt) {
+    public ToolCallResp chat(String prompt) {
 
-		// manual run tools flag
-		ChatOptions chatOptions = ToolCallingChatOptions.builder()
-				.toolCallbacks(toolsInit.getTools())
-				.internalToolExecutionEnabled(false)
-				.build();
-		Prompt userPrompt = new Prompt(prompt, chatOptions);
+        // manual run tools flag
+        ChatOptions chatOptions = ToolCallingChatOptions.builder()
+                .toolCallbacks(toolsInit.getTools())
+                .internalToolExecutionEnabled(false)
+                .build();
+        Prompt userPrompt = new Prompt(prompt, chatOptions);
 
-		ChatResponse response = chatClient.prompt(userPrompt)
-				.call().chatResponse();
+        ChatResponse response = chatClient.prompt(userPrompt)
+                .call().chatResponse();
 
-		logger.debug("ChatResponse: {}", response);
-		assert response != null;
-		List<AssistantMessage.ToolCall> toolCalls = response.getResult().getOutput().getToolCalls();
-		logger.debug("ToolCalls: {}", toolCalls);
-		String responseByLLm = response.getResult().getOutput().getText();
-		logger.debug("Response by LLM: {}", responseByLLm);
+        logger.debug("ChatResponse: {}", response);
+        assert response != null;
+        List<AssistantMessage.ToolCall> toolCalls = response.getResult().getOutput().getToolCalls();
+        logger.debug("ToolCalls: {}", toolCalls);
+        String responseByLLm = response.getResult().getOutput().getText();
+        logger.debug("Response by LLM: {}", responseByLLm);
 
-		// execute tools with no chat memory messages.
-		var tcr = ToolCallResp.TCR();
-		if (!toolCalls.isEmpty()) {
+        // execute tools with no chat memory messages.
+        var tcr = ToolCallResp.TCR();
+        if (!toolCalls.isEmpty()) {
 
-			tcr = ToolCallResp.startExecute(
-					responseByLLm,
-					toolCalls.get(0).name(),
-					toolCalls.get(0).arguments()
-			);
-			logger.debug("Start ToolCallResp: {}", tcr);
-			ToolExecutionResult toolExecutionResult = null;
+            tcr = ToolCallResp.startExecute(
+                    responseByLLm,
+                    toolCalls.get(0).name(),
+                    toolCalls.get(0).arguments()
+            );
+            logger.debug("Start ToolCallResp: {}", tcr);
+            ToolExecutionResult toolExecutionResult = null;
 
-			try {
-				toolExecutionResult = toolCallingManager.executeToolCalls(new Prompt(prompt, chatOptions), response);
+            try {
+                toolExecutionResult = toolCallingManager.executeToolCalls(new Prompt(prompt, chatOptions), response);
 
-				tcr.setToolEndTime(LocalDateTime.now());
-			}
-			catch (Exception e) {
+                tcr.setToolEndTime(LocalDateTime.now());
+            } catch (Exception e) {
 
-				tcr.setStatus(ToolCallResp.ToolState.FAILURE);
-				tcr.setErrorMessage(e.getMessage());
-				tcr.setToolEndTime(LocalDateTime.now());
-				tcr.setToolCostTime((long) (tcr.getToolEndTime().getNano() - tcr.getToolStartTime().getNano()));
-				logger.error("Error ToolCallResp: {}, msg: {}", tcr, e.getMessage());
-				// throw new RuntimeException("Tool execution failed, please check the logs for details.");
-			}
+                tcr.setStatus(ToolCallResp.ToolState.FAILURE);
+                tcr.setErrorMessage(e.getMessage());
+                tcr.setToolEndTime(LocalDateTime.now());
+                tcr.setToolCostTime((long) (tcr.getToolEndTime().getNano() - tcr.getToolStartTime().getNano()));
+                logger.error("Error ToolCallResp: {}, msg: {}", tcr, e.getMessage());
+                // throw new RuntimeException("Tool execution failed, please check the logs for details.");
+            }
 
-			String llmCallResponse = "";
-			if (Objects.nonNull(toolExecutionResult)) {
+            String llmCallResponse = "";
+            if (Objects.nonNull(toolExecutionResult)) {
 //				ToolResponseMessage toolResponseMessage = (ToolResponseMessage) toolExecutionResult.conversationHistory()
 //						.get(toolExecutionResult.conversationHistory().size() - 1);
 //				llmCallResponse = toolResponseMessage.getResponses().get(0).responseData();
-				ChatResponse finalResponse = chatClient.prompt().messages(toolExecutionResult.conversationHistory()).call().chatResponse();
-				llmCallResponse = finalResponse.getResult().getOutput().getText();
-			}
+                ChatResponse finalResponse = chatClient.prompt().messages(toolExecutionResult.conversationHistory()).call().chatResponse();
+                llmCallResponse = finalResponse.getResult().getOutput().getText();
+            }
 
-			tcr.setStatus(ToolCallResp.ToolState.SUCCESS);
-			tcr.setToolResult(llmCallResponse);
-			tcr.setToolCostTime((long) (tcr.getToolEndTime().getNano() - tcr.getToolStartTime().getNano()));
-			logger.debug("End ToolCallResp: {}", tcr);
-		}
-		else {
-			logger.debug("ToolCalls is empty, no tool execution needed.");
-			tcr.setToolResult(responseByLLm);
-		}
+            tcr.setStatus(ToolCallResp.ToolState.SUCCESS);
+            tcr.setToolResult(llmCallResponse);
+            tcr.setToolCostTime((long) (tcr.getToolEndTime().getNano() - tcr.getToolStartTime().getNano()));
+            logger.debug("End ToolCallResp: {}", tcr);
+        } else {
+            logger.debug("ToolCalls is empty, no tool execution needed.");
+            tcr.setToolResult(responseByLLm);
+        }
 
-		return tcr;
-	}
+        return tcr;
+    }
 
 }
